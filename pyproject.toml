@@ -17,6 +17,7 @@ scikit-learn = "^1.5.2"
 matplotlib = "^3.9.2"
 missingno = "^0.5.2"
 imbalanced-learn = "^0.12.4"
+lightgbm = "^4.5.0"
 
 
 [build-system]
