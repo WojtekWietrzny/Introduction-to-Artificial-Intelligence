@@ -420,7 +420,7 @@ assert 0.9 <= auroc <= 0.95
 print("Solution is correct!")
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""} tags=["ex"]
-# // skomentuj tutaj
+# po doborze hiperparametrów wynik faktycznie zwiększył się o około 0.01. Z drugiej jednak strony dobieranie hiperparametrów zajęło kilkanaście razy dłużej niż wytrenowanie modelu, niewiele gorszego od tego z dobranymi hiperparametrami, trzebaby się więc zastanowić czy ma to sens w zależności od kontekstu.
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""}
 # W praktycznych zastosowaniach osoba trenująca model wedle własnego uznana, doświadczenia, dostępnego czasu i zasobów wybiera, czy dostrajać hiperparametry i w jak szerokim zakresie. Dla Random Forest na szczęście często może nie być znaczącej potrzeby i za to go lubimy :)
@@ -469,7 +469,7 @@ lgbm_clf = LGBMClassifier(importance_type="gain",random_state=0,n_jobs=-1)
 
 lgbm_clf.fit(X_train_res, y_train_res)
 
-y_pred_proba = lgb_model.predict_proba(X_test)[:, 1]
+y_pred_proba = lgbm_clf.predict_proba(X_test)[:, 1]
 
 auroc_test = roc_auc_score(y_test, y_pred_proba)
 print(f"AUROC na zbiorze testowym: {auroc_test}")
@@ -481,7 +481,7 @@ assert 0.9 <= auroc <= 0.97
 print("Solution is correct!")
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""} tags=["ex"]
-# // skomentuj tutaj
+# boosting daje najlepsze wyniki z wszystkich 3 trenowanych modeli, wyniki są znacząco wyższe nawet od lasu losowego z dobranymi hiperparametrami
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""}
 # Boosting dzięki uczeniu na poprzednich drzewach redukuje nie tylko wariancję, ale też bias w błędzie, dzięki czemu może w wielu przypadkach osiągnąć lepsze rezultaty od lasu losowego. Do tego dzięki znakomitej implementacji LightGBM jest szybszy.
@@ -521,7 +521,6 @@ print("Solution is correct!")
 
 # %% editable=true pycharm={"is_executing": true, "name": "#%%\n"} slideshow={"slide_type": ""} tags=["ex"]
 # your_code
-import 
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.metrics import classification_report
 
@@ -538,12 +537,11 @@ param_grid = {
 random_search = RandomizedSearchCV(
     estimator=lgbm_clf,
     param_distributions=param_grid,
-    n_iter=30,  
+    n_iter=100,  
     scoring="roc_auc",  
     cv=5,  
     random_state=42,
-    n_jobs=-1,  
-    verbose=-1
+    n_jobs=-1
 )
 
 random_search.fit(X_train_res, y_train_res)
@@ -553,8 +551,8 @@ print(f"Optymalne hiperparametry: {best_params}")
 
 y_pred_proba_tuned = random_search.best_estimator_.predict_proba(X_test)[:, 1]
 
-auroc_tuned = roc_auc_score(y_test, y_pred_proba_tuned)
-print(f"AUROC dla modelu dostrojonego: {auroc_tuned}")
+auroc = roc_auc_score(y_test, y_pred_proba_tuned)
+print(f"AUROC dla modelu dostrojonego: {auroc}")
 
 lgbm_default = LGBMClassifier(random_state=0)
 lgbm_default.fit(X_train_res, y_train_res)
@@ -576,7 +574,7 @@ assert 0.9 <= auroc <= 0.99
 print("Solution is correct!")
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""} tags=["ex"]
-# // skomentuj tutaj
+# po dostrojeniu zauważamy znacząco poprawę precyzji modelu
 
 # %% [markdown] editable=true pycharm={"name": "#%% md\n"} slideshow={"slide_type": ""}
 # **Boosting - podsumowanie**
@@ -625,9 +623,52 @@ print("Solution is correct!")
 # %% editable=true slideshow={"slide_type": ""} tags=["ex"]
 # your_code
 
+import json
+
+with open('feature_names.json', 'r') as f:
+    feature_names = np.array(json.load(f))
+#print(feature_names)
+#print(feature_names[0])
+
+tree_clf = DecisionTreeClassifier(criterion='entropy', random_state=0)
+forest_clf = RandomForestClassifier(max_features=0.2,n_estimators=500, criterion='entropy', random_state=0, n_jobs=-1)
+lgbm_clf = LGBMClassifier(subsample=1.0,num_leaves=31,n_estimators=500,learning_rate=0.2, colsample_bytree=1.0,importance_type="gain",random_state=0, verbose=-1)
+
+tree_clf.fit(X_train_res, y_train_res)
+forest_clf.fit(X_train_res, y_train_res)
+lgbm_clf.fit(X_train_res, y_train_res)
+
+tree_importances = tree_clf.feature_importances_
+forest_importances = forest_clf.feature_importances_
+lgbm_importances = lgbm_clf.feature_importances_ / np.sum(lgbm_clf.feature_importances_)
+
+tree_indices = np.argsort(tree_importances)[-5:][::-1]
+forest_indices = np.argsort(forest_importances)[-5:][::-1]
+lgbm_indices = np.argsort(lgbm_importances)[-5:][::-1]
+
+#print(tree_indices)
+
+tree_features = feature_names[tree_indices]
+forest_features = feature_names[forest_indices]
+lgbm_features = feature_names[lgbm_indices]
+
+fig, axs = plt.subplots(3, 1, figsize=(10, 15))
+
+axs[0].barh(tree_features, tree_importances[tree_indices])
+axs[0].set_title('Feature importance - Decision Tree')
+
+axs[1].barh(forest_features, forest_importances[forest_indices])
+axs[1].set_title('Feature importance - Random Forest')
+
+axs[2].barh(lgbm_features, lgbm_importances[lgbm_indices])
+axs[2].set_title('Feature importance - Boosting')
+
+plt.tight_layout()
+plt.show()
+
 
 # %% [markdown] editable=true slideshow={"slide_type": ""} tags=["ex"]
-# // skomentuj tutaj
+# można zauważyć, że priorytetyzowanie przychodów ponad sprzedaż, w połączeniu z dużym wliczaniem strat daje generalnie lepsze wyniki
 
 # %% [markdown]
 # ### Dla zainteresowanych
@@ -661,3 +702,4 @@ print("Solution is correct!")
 # - Boruta (wrapper method), stworzony na Uniwersytecie Warszawskim, łączący Random Forest oraz testy statystyczne (biblioteka `boruta_py`): [link 1](https://towardsdatascience.com/boruta-explained-the-way-i-wish-someone-explained-it-to-me-4489d70e154a), [link 2](https://danielhomola.com/feature%20selection/phd/borutapy-an-all-relevant-feature-selection-method/)
 
 # %% editable=true pycharm={"name": "#%%\n"} slideshow={"slide_type": ""} tags=["ex"]
+# TODO
