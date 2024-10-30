@@ -540,7 +540,7 @@ random_search = RandomizedSearchCV(
     n_iter=100,  
     scoring="roc_auc",  
     cv=5,  
-    random_state=42,
+    random_state=0,
     n_jobs=-1
 )
 
@@ -702,4 +702,61 @@ plt.show()
 # - Boruta (wrapper method), stworzony na Uniwersytecie Warszawskim, łączący Random Forest oraz testy statystyczne (biblioteka `boruta_py`): [link 1](https://towardsdatascience.com/boruta-explained-the-way-i-wish-someone-explained-it-to-me-4489d70e154a), [link 2](https://danielhomola.com/feature%20selection/phd/borutapy-an-all-relevant-feature-selection-method/)
 
 # %% editable=true pycharm={"name": "#%%\n"} slideshow={"slide_type": ""} tags=["ex"]
-# TODO
+# your code
+from sklearn.datasets import make_classification
+from sklearn.feature_selection import SelectPercentile, mutual_info_classif, RFE
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.svm import SVC
+
+# filtering method
+selector_filter = SelectPercentile(mutual_info_classif, percentile=80)  # choosing 80 percent to stay
+X_train_filter = selector_filter.fit_transform(X_train_res, y_train_res)
+X_test_filter = selector_filter.transform(X_test)
+
+# embedded method
+forest_clf_embedded = RandomForestClassifier(random_state=0)
+forest_clf_embedded.fit(X_train_res, y_train_res)
+importances = forest_clf_embedded.feature_importances_
+top_features = np.argsort(importances)[::-1][:int(0.8 * X_train_res.shape[1])]
+X_train_embedded = X_train_res[:, top_features]
+X_test_embedded = X_test[:, top_features]
+
+# wrapper method
+svc = SVC(kernel="linear")
+rfe = RFE(estimator=svc, n_features_to_select=int(0.8 * X_train_res.shape[1]), step=1)
+X_train_wrapper = rfe.fit_transform(X_train_res, y_train_res)
+X_test_wrapper = rfe.transform(X_test)
+
+
+
+def evaluate_model(model, X_train, y_train, X_test, y_test):
+    model.fit(X_train, y_train)
+    y_pred = model.predict_proba(X_test)[:, 1]
+    return roc_auc_score(y_test, y_pred)
+
+# Models
+
+forest_clf = RandomForestClassifier(criterion='entropy', random_state=0, n_jobs=-1)
+lgbm_clf = LGBMClassifier(importance_type="gain",random_state=0, verbose=-1, n_jobs=-1)
+
+# Results before selection
+print(f"Random Forest auroc before selection: {evaluate_model(rf, X_train_res, y_train_res, X_test, y_test):.4f}")
+print(f"LightGBM auroc befre selection: {evaluate_model(lgbm, X_train_res, y_train_res, X_test, y_test):.4f}")
+
+# Result after filter selection
+print(f"Random Forest after filter selection: {evaluate_model(rf, X_train_filter, y_train, X_test_filter, y_test):.4f}")
+print(f"LightGBM after filter selection: {evaluate_model(lgbm, X_train_filter, y_train, X_test_filter, y_test):.4f}")
+
+# Result after embedded selection
+print(f"Random Forest after embeded selection: {evaluate_model(rf, X_train_embedded, y_train, X_test_embedded, y_test):.4f}")
+print(f"LightGBM after embedded selection: {evaluate_model(lgbm, X_train_embedded, y_train, X_test_embedded, y_test):.4f}")
+
+# Result after wrapper selection
+print(f"Random Forest after wrapper selection: {evaluate_model(rf, X_train_wrapper, y_train, X_test_wrapper, y_test):.4f}")
+print(f"LightGBM after wrapper selection: {evaluate_model(lgbm, X_train_wrapper, y_train, X_test_wrapper, y_test):.4f}")
+
+
+# %%
+// niestety nie jestem w stanie stwierdzić jakie są wyniki modeli po odcięciu 20% najsłabszych cech, 
+ponieważ pierwsza wersja kodu liczyła się 5h 45minut. Druga poprawiona liczy sie godzine, dalej bez zadnego skutku.
+
